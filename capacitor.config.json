@@ -1,9 +1,9 @@
 {
-  "appId": "com.alecca.vcxvxcv",
-  "appName": "98hdfvguhdfiugbjcvpbjovpcob",
+  "appId": "com.yourname.yourapp",
+  "appName": "Your App Name",
   "webDir": "dist",
   "server": {
-    "url": "https://sale-internal.alecca.my.id/",
+    "url": "https://yourweb.com/",
     "cleartext": true
   },
   "plugins": {
