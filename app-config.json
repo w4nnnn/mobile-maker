@@ -1,0 +1,25 @@
+{
+    "appId": "com.alecca.vcxvxcv",
+    "appName": "98hdfvguhdfiug Learning",
+    "webUrl": "https://english-learning.alecca.my.id/",
+    "backgroundColor": "#000000",
+    "plugins": {
+        "@capacitor/camera": false,
+        "@capacitor/filesystem": false,
+        "@capacitor/geolocation": false,
+        "@capacitor/device": false,
+        "@capacitor/share": false,
+        "@capacitor/splash-screen": true,
+        "@capacitor/browser": true
+    },
+    "permissions": {
+        "android.permission.INTERNET": true,
+        "android.permission.RECORD_AUDIO": true,
+        "android.permission.MODIFY_AUDIO_SETTINGS": true,
+        "android.permission.CAMERA": false,
+        "android.permission.READ_EXTERNAL_STORAGE": false,
+        "android.permission.WRITE_EXTERNAL_STORAGE": false,
+        "android.permission.ACCESS_FINE_LOCATION": false,
+        "android.permission.ACCESS_COARSE_LOCATION": false
+    }
+}

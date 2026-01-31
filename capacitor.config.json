@@ -1,0 +1,16 @@
+{
+  "appId": "com.alecca.vcxvxcv",
+  "appName": "98hdfvguhdfiug Learning",
+  "webDir": "dist",
+  "server": {
+    "url": "https://english-learning.alecca.my.id/",
+    "cleartext": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "launchShowDuration": 3000
+    }
+  },
+  "backgroundColor": "#000000"
+}
