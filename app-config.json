@@ -1,7 +1,7 @@
 {
     "appId": "com.alecca.vcxvxcv",
     "appName": "98hdfvguhdfiug Learning",
-    "webUrl": "https://english-learning.alecca.my.id/",
+    "webUrl": "https://sale-internal.alecca.my.id/",
     "backgroundColor": "#000000",
     "plugins": {
         "@capacitor/camera": false,

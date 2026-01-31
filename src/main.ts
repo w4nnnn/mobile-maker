@@ -1,6 +1,6 @@
 import { SplashScreen } from '@capacitor/splash-screen';
 
-// Hide the splash screen after the app has loaded
+// Ensure splash screen hides even if we fall back to this local page
 window.addEventListener('load', async () => {
     try {
         await SplashScreen.hide();

@@ -3,188 +3,162 @@ import path from 'path';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// --- Configuration ---
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PATHS = {
+    ROOT: path.resolve(__dirname, '..'),
+    ANDROID: path.resolve(__dirname, '../android'),
+    APP_CONFIG: path.resolve(__dirname, '../app-config.json'),
+    CAP_CONFIG: path.resolve(__dirname, '../capacitor.config.json'),
+    PACKAGE_JSON: path.resolve(__dirname, '../package.json'),
+    MANIFEST: path.resolve(__dirname, '../android/app/src/main/AndroidManifest.xml'),
+    LOCAL_PROPS: path.resolve(__dirname, '../android/local.properties'),
+};
 
-const projectRoot = path.resolve(__dirname, '..');
-const androidDir = path.join(projectRoot, 'android');
-const manifestPath = path.join(androidDir, 'app/src/main/AndroidManifest.xml');
-const appConfigPath = path.join(projectRoot, 'app-config.json');
-const capacitorConfigPath = path.join(projectRoot, 'capacitor.config.json');
+// --- Helpers ---
+const log = (msg) => console.log(msg);
+const error = (msg) => console.error(msg);
+const runs = (cmd) => execSync(cmd, { stdio: 'inherit', cwd: PATHS.ROOT });
 
-// Permissions to ensure are present in the manifest
-const REQUIRED_PERMISSIONS = [
-    '<uses-permission android:name="android.permission.INTERNET" />',
-    '<uses-permission android:name="android.permission.RECORD_AUDIO" />',
-    '<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />'
-];
+function readJson(filePath) {
+    if (!fs.existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
 
-function updateConfig() {
-    console.log('\n⚙️  Step 0: Updating Project Configuration...');
+function writeJson(filePath, data) {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+}
 
-    if (!fs.existsSync(appConfigPath)) {
-        console.error('❌ app-config.json not found!');
-        process.exit(1);
-    }
+// --- Steps ---
 
-    // 1. Read app-config.json
-    const appConfig = JSON.parse(fs.readFileSync(appConfigPath, 'utf8'));
-    console.log(`   📱 App Name: ${appConfig.appName}`);
-    console.log(`   🆔 App ID: ${appConfig.appId}`);
-    console.log(`   🌐 Web URL: ${appConfig.webUrl}`);
+function step0_updateConfig() {
+    log('\n⚙️  Step 0: Updating Project Configuration...');
+    const appConfig = readJson(PATHS.APP_CONFIG);
+    log(`   📱 App Name: ${appConfig.appName}`);
+    log(`   🆔 App ID: ${appConfig.appId}`);
 
-    // 2. Read and Update capacitor.config.json
-    if (fs.existsSync(capacitorConfigPath)) {
-        const capConfig = JSON.parse(fs.readFileSync(capacitorConfigPath, 'utf8'));
-
-        // Update fields
+    if (fs.existsSync(PATHS.CAP_CONFIG)) {
+        const capConfig = readJson(PATHS.CAP_CONFIG);
         capConfig.appId = appConfig.appId;
         capConfig.appName = appConfig.appName;
-        capConfig.server = {
-            ...(capConfig.server || {}),
-            url: appConfig.webUrl,
-            cleartext: true
-        };
+        capConfig.server = { ...(capConfig.server || {}), url: appConfig.webUrl, cleartext: true };
+        if (appConfig.backgroundColor) capConfig.backgroundColor = appConfig.backgroundColor;
 
-        // Optional: Set startup background color if provided
-        if (appConfig.backgroundColor) {
-            capConfig.backgroundColor = appConfig.backgroundColor;
-        }
-
-        fs.writeFileSync(capacitorConfigPath, JSON.stringify(capConfig, null, 2), 'utf8');
-        console.log('   ✅ capacitor.config.json updated.');
+        writeJson(PATHS.CAP_CONFIG, capConfig);
+        log('   ✅ capacitor.config.json updated.');
     } else {
-        console.error('   ⚠️ capacitor.config.json not found.');
+        error('   ⚠️ capacitor.config.json not found.');
     }
+    return appConfig;
 }
 
-// 0.5 Helper to manage plugins
-function managePlugins(plugins) {
+function step0_5_managePlugins(plugins) {
     if (!plugins) return;
-    console.log('\n📦 Step 0.5: Managing Plugins...');
+    log('\n📦 Step 0.5: Managing Plugins...');
 
-    // Get installed plugins from package.json
-    const packageJsonPath = path.join(projectRoot, 'package.json');
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-    const installedDeps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+    const pkg = readJson(PATHS.PACKAGE_JSON);
+    const installed = { ...pkg.dependencies, ...pkg.devDependencies };
 
-    for (const [pluginName, isEnabled] of Object.entries(plugins)) {
-        const isInstalled = !!installedDeps[pluginName];
-
+    Object.entries(plugins).forEach(([plugin, isEnabled]) => {
+        const isInstalled = !!installed[plugin];
         if (isEnabled && !isInstalled) {
-            console.log(`   ➕ Installing ${pluginName}...`);
-            execSync(`npm install ${pluginName}`, { stdio: 'inherit', cwd: projectRoot });
+            log(`   ➕ Installing ${plugin}...`);
+            runs(`npm install ${plugin}`);
         } else if (!isEnabled && isInstalled) {
-            console.log(`   ➖ Uninstalling ${pluginName}...`);
-            execSync(`npm uninstall ${pluginName}`, { stdio: 'inherit', cwd: projectRoot });
+            log(`   ➖ Uninstalling ${plugin}...`);
+            runs(`npm uninstall ${plugin}`);
         }
+    });
+}
+
+function step1_buildWeb() {
+    log('\n🔨 Step 1: Building Web Assets (Vite)...');
+    runs('npm run build');
+}
+
+function step2_removeAndroid() {
+    if (fs.existsSync(PATHS.ANDROID)) {
+        log('\n🗑️  Step 2: Removing existing android directory...');
+        fs.rmSync(PATHS.ANDROID, { recursive: true, force: true });
     }
 }
+
+function step3_generateAndroid() {
+    log('\n✨ Step 3: Generating fresh Android project...');
+    runs('npx cap add android');
+}
+
+function step4_createLocalProperties() {
+    log('\n🔧 Step 4: Generating local.properties...');
+    const sdkPath = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
+    let targetPath = sdkPath;
+
+    if (!targetPath) {
+        log('   ⚠️ ANDROID_HOME not set. Searching default locations...');
+        if (process.platform === 'win32') targetPath = path.join(process.env.LOCALAPPDATA, 'Android', 'Sdk');
+        else if (process.platform === 'darwin') targetPath = path.join(process.env.HOME, 'Library', 'Android', 'sdk');
+    }
+
+    if (targetPath && fs.existsSync(targetPath)) {
+        const escaped = targetPath.replace(/\\/g, '\\\\');
+        fs.writeFileSync(PATHS.LOCAL_PROPS, `sdk.dir=${escaped}\n`, 'utf8');
+        log(`   ✅ local.properties -> ${targetPath}`);
+    } else {
+        error('   ❌ Android SDK not found. Please set ANDROID_HOME.');
+    }
+}
+
+function step5_injectPermissions(permissions) {
+    log('\n🛡️  Step 5: Injecting permissions...');
+    if (!fs.existsSync(PATHS.MANIFEST)) {
+        return error(`   ⚠️ Manifest not found: ${PATHS.MANIFEST}`);
+    }
+
+    let content = fs.readFileSync(PATHS.MANIFEST, 'utf8');
+    const closingTag = '</manifest>';
+    const idx = content.lastIndexOf(closingTag);
+
+    if (idx === -1) return error('   ⚠️ Invalid Manifest format.');
+
+    const toInject = Object.entries(permissions || {})
+        .filter(([, enabled]) => enabled)
+        .map(([name]) => `<uses-permission android:name="${name}" />`)
+        .filter(tag => !content.includes(tag));
+
+    if (toInject.length > 0) {
+        content = content.substring(0, idx) +
+            '\n    <!-- Auto-injected permissions -->\n    ' +
+            toInject.join('\n    ') + '\n' +
+            content.substring(idx);
+        fs.writeFileSync(PATHS.MANIFEST, content, 'utf8');
+        log(`   ✅ Added ${toInject.length} permissions.`);
+    } else {
+        log('   👍 No new permissions needed.');
+    }
+}
+
+function step6_finalSync() {
+    log('\n🔄 Step 6: Final Sync...');
+    runs('npx cap sync');
+}
+
+// --- Main Execution ---
 
 async function run() {
-    console.log('🚀 Starting Mobile Maker Build Process...');
-
+    log('🚀 Starting Mobile Maker Build Process...');
     try {
-        // 0. Update Config (Integrated)
-        updateConfig();
-
-        // Read config again to get plugins/permissions
-        const appConfig = JSON.parse(fs.readFileSync(appConfigPath, 'utf8'));
-
-        // 0.5 Manage Plugins
-        managePlugins(appConfig.plugins);
-
-        // 1. Build Web Assets
-        console.log('\n🔨 Step 1: Building Web Assets (Vite)...');
-        execSync('npm run build', { stdio: 'inherit', cwd: projectRoot });
-
-        // 2. Remove existing android folder
-        if (fs.existsSync(androidDir)) {
-            console.log('\n🗑️  Step 2: Removing existing android directory...');
-            fs.rmSync(androidDir, { recursive: true, force: true });
-        }
-
-        // 3. Add android platform again
-        console.log('\n✨ Step 3: Generating fresh Android project...');
-        execSync('npx cap add android', { stdio: 'inherit', cwd: projectRoot });
-
-        // 4. Create local.properties
-        console.log('\n🔧 Step 4: Generating local.properties...');
-        const sdkPath = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
-
-        let pathToWrite = null;
-        if (sdkPath) {
-            pathToWrite = sdkPath;
-        } else {
-            console.warn('   ⚠️ ANDROID_HOME not set. Trying to find SDK path automatically...');
-            if (process.platform === 'win32') {
-                pathToWrite = path.join(process.env.LOCALAPPDATA, 'Android', 'Sdk');
-            } else if (process.platform === 'darwin') {
-                pathToWrite = path.join(process.env.HOME, 'Library', 'Android', 'sdk');
-            }
-        }
-
-        if (pathToWrite && fs.existsSync(pathToWrite)) {
-            const escapedPath = pathToWrite.replace(/\\/g, '\\\\');
-            const localPropertiesPath = path.join(androidDir, 'local.properties');
-            fs.writeFileSync(localPropertiesPath, `sdk.dir=${escapedPath}\n`, 'utf8');
-            console.log(`   ✅ local.properties created pointing to: ${pathToWrite}`);
-        } else {
-            console.error('   ❌ Could not find Android SDK automatically.');
-        }
-
-        // 5. Inject Permissions
-        console.log('\n🛡️  Step 5: Injecting permissions into AndroidManifest.xml...');
-        if (fs.existsSync(manifestPath)) {
-            let manifestContent = fs.readFileSync(manifestPath, 'utf8');
-            const closingTagIndex = manifestContent.lastIndexOf('</manifest>');
-
-            if (closingTagIndex !== -1) {
-                // Get Enabled Permissions from Config + Default Required ones (Internet is usually mandatory)
-                const configPermissions = appConfig.permissions || {};
-                const permissionsToInject = [];
-
-                for (const [permString, isEnabled] of Object.entries(configPermissions)) {
-                    if (isEnabled) {
-                        permissionsToInject.push(`<uses-permission android:name="${permString}" />`);
-                    }
-                }
-
-                // Filter out permissions that are already in the manifest (unlikely for a fresh project, but good practice)
-                const uniquePermissions = permissionsToInject.filter(
-                    perm => !manifestContent.includes(perm)
-                );
-
-                if (uniquePermissions.length > 0) {
-                    const newContent =
-                        manifestContent.substring(0, closingTagIndex) +
-                        '\n    <!-- Auto-injected permissions -->\n    ' +
-                        uniquePermissions.join('\n    ') +
-                        '\n' +
-                        manifestContent.substring(closingTagIndex);
-
-                    fs.writeFileSync(manifestPath, newContent, 'utf8');
-                    console.log(`   ✅ Added ${uniquePermissions.length} permissions.`);
-                } else {
-                    console.log('   👍 No new permissions to add.');
-                }
-            } else {
-                console.error('   ⚠️  Could not find </manifest> tag.');
-            }
-        } else {
-            console.error(`   ⚠️  Manifest file not found at ${manifestPath}`);
-        }
-
-        // 6. Sync Capacitor
-        console.log('\n🔄 Step 6: Final Sync...');
-        execSync('npx cap sync', { stdio: 'inherit', cwd: projectRoot });
-
-        console.log('\n✅✅✅ All Done! Project is ready. ✅✅✅');
-        console.log('👉 Run "npx cap run android" to launch on device/emulator.');
-
-    } catch (error) {
-        console.error('\n❌ Build Process Failed!');
-        console.error(error);
+        const config = step0_updateConfig();
+        step0_5_managePlugins(config.plugins);
+        step1_buildWeb();
+        step2_removeAndroid();
+        step3_generateAndroid();
+        step4_createLocalProperties();
+        step5_injectPermissions(config.permissions);
+        step6_finalSync();
+        log('\n✅✅✅ Build Successful! Run "npx cap run android" to launch. ✅✅✅');
+    } catch (e) {
+        error('\n❌ Build Failed!');
+        console.error(e);
         process.exit(1);
     }
 }

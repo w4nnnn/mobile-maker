@@ -3,7 +3,7 @@
   "appName": "98hdfvguhdfiug Learning",
   "webDir": "dist",
   "server": {
-    "url": "https://english-learning.alecca.my.id/",
+    "url": "https://sale-internal.alecca.my.id/",
     "cleartext": true
   },
   "plugins": {
